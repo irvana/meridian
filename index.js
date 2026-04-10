@@ -21,6 +21,24 @@ log("startup", "DLMM LP Agent starting...");
 log("startup", `Mode: ${process.env.DRY_RUN === "true" ? "DRY RUN" : "LIVE"}`);
 log("startup", `Model: ${process.env.LLM_MODEL || "hermes-3-405b"}`);
 
+// ── Startup Telegram notification ────────────────────────────────
+(async () => {
+  try {
+    const mode    = process.env.DRY_RUN === "true" ? "🧪 DRY RUN" : "🟢 LIVE";
+    const model   = process.env.LLM_MODEL || "openrouter/healer-alpha";
+    const time    = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta", hour12: false });
+    await sendHTML(
+      `🤖 <b>Meridian Bot Started</b>\n\n` +
+      `Mode  : <code>${mode}</code>\n` +
+      `Model : <code>${model}</code>\n` +
+      `Time  : <code>${time}</code>`
+    );
+    log("startup", "Telegram startup notification sent.");
+  } catch (e) {
+    log("startup_warn", `Telegram startup notification failed: ${e.message}`);
+  }
+})();
+
 const TP_PCT = config.management.takeProfitFeePct;
 const DEPLOY = config.management.deployAmountSol;
 
