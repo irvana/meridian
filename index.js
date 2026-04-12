@@ -304,26 +304,52 @@ export async function runManagementCycle({ silent = false } = {}) {
 
     const reportLines = positionData.map((p) => {
       const act = actionMap.get(p.position);
-      const inRange = p.in_range ? "🟢 IN" : `🔴 OOR ${p.minutes_out_of_range ?? 0}m`;
-      const val = config.management.solMode ? `◎${p.total_value_usd ?? "?"}` : `$${p.total_value_usd ?? "?"}`;
-      const unclaimed = config.management.solMode ? `◎${p.unclaimed_fees_usd ?? "?"}` : `$${p.unclaimed_fees_usd ?? "?"}`;
-      const statusLabel = act.action === "INSTRUCTION" ? "HOLD (instruction)" : act.action;
-      const netUsd = (p.pnl_pct != null && p.unclaimed_fees_usd != null && p.total_value_usd)
-        ? (p.pnl_pct / 100 * p.total_value_usd) + p.unclaimed_fees_usd
-        : null;
-      const netPct = (netUsd != null && p.total_value_usd)
-        ? netUsd / p.total_value_usd * 100
-        : null;
       const cur = config.management.solMode ? "◎" : "$";
+
+      // Status indicators
+      const inRange = p.in_range ? "🟢 IN" : `🔴 OOR ${p.minutes_out_of_range ?? 0}m`;
+      const statusEmoji = act.action === "STAY" ? "✋" : act.action === "CLOSE" ? "🔒" : act.action === "CLAIM" ? "💸" : "⚙️";
+      const statusLabel = act.action === "INSTRUCTION" ? "HOLD" : act.action;
+
+      // Values
+      const nowVal = p.total_value_usd ?? 0;
+      const tracked = getTrackedPosition(p.position);
+      const entryVal = tracked?.initial_value_usd ?? null;
+      const entryStr = entryVal != null ? `${cur}${entryVal.toFixed(2)}` : "—";
+      const valChange = entryVal != null ? nowVal - entryVal : null;
+      const valChangeStr = valChange != null
+        ? ` (${valChange >= 0 ? "+" : ""}${cur}${Math.abs(valChange).toFixed(2)})`
+        : "";
+
+      // Net PnL (IL + fees)
+      const netUsd = (p.pnl_pct != null && p.unclaimed_fees_usd != null && nowVal)
+        ? (p.pnl_pct / 100 * nowVal) + p.unclaimed_fees_usd
+        : null;
+      const netPct = (netUsd != null && nowVal) ? netUsd / nowVal * 100 : null;
+      const netEmoji = netUsd == null ? "" : netUsd >= 0 ? "📈" : "📉";
       const netStr = (netUsd != null && netPct != null)
         ? `${netUsd >= 0 ? "+" : ""}${cur}${Math.abs(netUsd).toFixed(2)} (${netPct >= 0 ? "+" : ""}${netPct.toFixed(2)}%)`
         : "?";
-      let line = `**${p.pair}** | Age: ${p.age_minutes ?? "?"}m | Val: ${val} | Unclaimed: ${unclaimed} | PnL: ${p.pnl_pct ?? "?"}% | Net: ${netStr} | Yield: ${p.fee_per_tvl_24h ?? "?"}% | ${inRange} | ${statusLabel}`;
-      if (p.instruction) line += `\nNote: "${p.instruction}"`;
-      if (act.action === "CLOSE" && act.rule === "exit") line += `\n⚡ Trailing TP: ${act.reason}`;
-      if (act.action === "CLOSE" && act.rule && act.rule !== "exit") line += `\nRule ${act.rule}: ${act.reason}`;
-      if (act.action === "CLAIM") line += `\n→ Claiming fees`;
-      return line;
+
+      // PnL indicator
+      const pnlVal = p.pnl_pct ?? 0;
+      const pnlStr = `${pnlVal >= 0 ? "+" : ""}${pnlVal}%`;
+
+      // Yield indicator
+      const yieldVal = p.fee_per_tvl_24h ?? 0;
+      const yieldEmoji = yieldVal >= 20 ? "🔥" : yieldVal >= 7 ? "✅" : "⚠️";
+
+      // Build 3-line card
+      const line1 = `**${p.pair}**  ${inRange}  ·  ⏱ ${p.age_minutes ?? "?"}m  →  ${statusEmoji} ${statusLabel}`;
+      const line2 = `💵 Entry ${entryStr}  ›  Now ${cur}${nowVal.toFixed(2)}${valChangeStr}  ·  PnL ${pnlStr}`;
+      const line3 = `${netEmoji} Net ${netStr}  ·  💎 Fees ${cur}${(p.unclaimed_fees_usd ?? 0).toFixed(2)}  ·  ${yieldEmoji} Yield ${yieldVal}%`;
+
+      let card = [line1, line2, line3].join("\n");
+      if (p.instruction) card += `\n📌 Note: "${p.instruction}"`;
+      if (act.action === "CLOSE" && act.rule === "exit") card += `\n⚡ Trailing TP: ${act.reason}`;
+      if (act.action === "CLOSE" && act.rule && act.rule !== "exit") card += `\n⚠️ Rule ${act.rule}: ${act.reason}`;
+      if (act.action === "CLAIM") card += `\n💸 Claiming fees now`;
+      return card;
     });
 
     const needsAction = [...actionMap.values()].filter(a => a.action !== "STAY");
