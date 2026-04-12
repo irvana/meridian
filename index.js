@@ -308,7 +308,17 @@ export async function runManagementCycle({ silent = false } = {}) {
       const val = config.management.solMode ? `◎${p.total_value_usd ?? "?"}` : `$${p.total_value_usd ?? "?"}`;
       const unclaimed = config.management.solMode ? `◎${p.unclaimed_fees_usd ?? "?"}` : `$${p.unclaimed_fees_usd ?? "?"}`;
       const statusLabel = act.action === "INSTRUCTION" ? "HOLD (instruction)" : act.action;
-      let line = `**${p.pair}** | Age: ${p.age_minutes ?? "?"}m | Val: ${val} | Unclaimed: ${unclaimed} | PnL: ${p.pnl_pct ?? "?"}% | Yield: ${p.fee_per_tvl_24h ?? "?"}% | ${inRange} | ${statusLabel}`;
+      const netUsd = (p.pnl_pct != null && p.unclaimed_fees_usd != null && p.total_value_usd)
+        ? (p.pnl_pct / 100 * p.total_value_usd) + p.unclaimed_fees_usd
+        : null;
+      const netPct = (netUsd != null && p.total_value_usd)
+        ? netUsd / p.total_value_usd * 100
+        : null;
+      const cur = config.management.solMode ? "◎" : "$";
+      const netStr = (netUsd != null && netPct != null)
+        ? `${netUsd >= 0 ? "+" : ""}${cur}${Math.abs(netUsd).toFixed(2)} (${netPct >= 0 ? "+" : ""}${netPct.toFixed(2)}%)`
+        : "?";
+      let line = `**${p.pair}** | Age: ${p.age_minutes ?? "?"}m | Val: ${val} | Unclaimed: ${unclaimed} | PnL: ${p.pnl_pct ?? "?"}% | Net: ${netStr} | Yield: ${p.fee_per_tvl_24h ?? "?"}% | ${inRange} | ${statusLabel}`;
       if (p.instruction) line += `\nNote: "${p.instruction}"`;
       if (act.action === "CLOSE" && act.rule === "exit") line += `\n⚡ Trailing TP: ${act.reason}`;
       if (act.action === "CLOSE" && act.rule && act.rule !== "exit") line += `\nRule ${act.rule}: ${act.reason}`;
