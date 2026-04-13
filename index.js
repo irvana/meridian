@@ -290,11 +290,17 @@ export async function runManagementCycle({ silent = false } = {}) {
         actionMap.set(p.position, { action: "CLOSE", rule: 5, reason: "low yield" });
         continue;
       }
-      // Rule 6: fee-first exit — close when unclaimed fees cover gas + margin
+      // Rule 6: fee-first exit — close when unclaimed fees cover gas + margin AND net is positive
       const feeFirstThreshold = config.management.feeFirstExitUsd ?? 0;
       if (feeFirstThreshold > 0 && (p.unclaimed_fees_usd ?? 0) >= feeFirstThreshold) {
-        actionMap.set(p.position, { action: "CLOSE", rule: 6, reason: `fees $${(p.unclaimed_fees_usd ?? 0).toFixed(2)} >= $${feeFirstThreshold.toFixed(2)} target` });
-        continue;
+        const nowVal = p.total_value_usd ?? 0;
+        const netUsd = (p.pnl_pct != null && p.unclaimed_fees_usd != null && nowVal)
+          ? (p.pnl_pct / 100 * nowVal) + p.unclaimed_fees_usd
+          : null;
+        if (netUsd != null && netUsd > 0) {
+          actionMap.set(p.position, { action: "CLOSE", rule: 6, reason: `fee-first: fees $${(p.unclaimed_fees_usd ?? 0).toFixed(2)} >= $${feeFirstThreshold.toFixed(2)}, net +$${netUsd.toFixed(2)}` });
+          continue;
+        }
       }
       // Claim rule
       if ((p.unclaimed_fees_usd ?? 0) >= config.management.minClaimAmount) {
