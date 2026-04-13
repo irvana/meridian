@@ -20,17 +20,15 @@ import {
 } from "../state.js";
 import { recordPerformance } from "../lessons.js";
 import { isBaseMintOnCooldown, isPoolOnCooldown } from "../pool-memory.js";
-import { normalizeMint } from "./wallet.js";
+import { normalizeMint, getWalletBalances } from "./wallet.js";
 
 // ─── SOL price helper ─────────────────────────────────────────
-const SOL_MINT = "So11111111111111111111111111111111111111112";
-const JUPITER_PRICE_API = "https://api.jup.ag/price/v3";
-
+// Uses Helius via getWalletBalances — same source as management cycle, already proven working.
 async function getSolPrice() {
   try {
-    const res = await fetch(`${JUPITER_PRICE_API}?ids=${SOL_MINT}`);
-    const data = await res.json();
-    return data?.data?.[SOL_MINT]?.price ?? 0;
+    const wallet = await getWalletBalances();
+    const price = wallet?.sol_price ?? 0;
+    return price;
   } catch (e) {
     log("price_error", `Failed to fetch SOL price: ${e.message}`);
     return 0;
@@ -259,19 +257,23 @@ export async function deployPosition({
     _positionsCacheAt = 0;
 
     // Calculate initial_value_usd from actual deployed amounts instead of trusting LLM
-    let calculatedInitialUsd = 0;
+    let calculatedInitialUsd = null;
     try {
       const solPrice = await getSolPrice();
-      calculatedInitialUsd = finalAmountY * solPrice;
-      // If tokenX was also deposited, estimate its value from the active bin price
-      if (finalAmountX > 0) {
-        const activePriceFloat = parseFloat(activeBin.price);
-        if (activePriceFloat > 0) {
-          // activeBin.price is tokenX per tokenY (SOL), so tokenX value in SOL = finalAmountX / activePriceFloat
-          calculatedInitialUsd += (finalAmountX / activePriceFloat) * solPrice;
+      if (solPrice > 0) {
+        calculatedInitialUsd = finalAmountY * solPrice;
+        // If tokenX was also deposited, estimate its value from the active bin price
+        if (finalAmountX > 0) {
+          const activePriceFloat = parseFloat(activeBin.price);
+          if (activePriceFloat > 0) {
+            // activeBin.price is tokenX per tokenY (SOL), so tokenX value in SOL = finalAmountX / activePriceFloat
+            calculatedInitialUsd += (finalAmountX / activePriceFloat) * solPrice;
+          }
         }
+        log("deploy", `Calculated initial_value_usd: $${calculatedInitialUsd.toFixed(2)} (SOL price: $${solPrice.toFixed(2)}, amountY: ${finalAmountY}, amountX: ${finalAmountX})`);
+      } else {
+        log("deploy", `Warning: SOL price returned 0, initial_value_usd will be null`);
       }
-      log("deploy", `Calculated initial_value_usd: $${calculatedInitialUsd.toFixed(2)} (SOL price: $${solPrice.toFixed(2)}, amountY: ${finalAmountY}, amountX: ${finalAmountX})`);
     } catch (e) {
       log("deploy", `Warning: could not calculate initial_value_usd: ${e.message}`);
     }

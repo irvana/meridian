@@ -340,9 +340,10 @@ export function getTrackedPositions(openOnly = false) {
 export function getTrackedPosition(position_address) {
   const state = load();
   const pos = state.positions[position_address] || null;
-  if (pos && pos.initial_value_usd != null && pos.amount_sol != null && pos.amount_sol > 0) {
+  if (pos && pos.initial_value_usd != null && pos.initial_value_usd > 0 && pos.amount_sol != null && pos.amount_sol > 0) {
     // SOL price is unlikely to exceed $1000 or be below $1 in realistic scenarios.
     // If initial_value_usd / amount_sol > 1000, the stored value is clearly bogus.
+    // Skip check if value is 0 or null (price fetch may have failed — not bogus, just missing).
     const impliedSolPrice = pos.initial_value_usd / pos.amount_sol;
     if (impliedSolPrice > 1000 || impliedSolPrice < 1) {
       log("state", `Sanitizing bogus initial_value_usd ${pos.initial_value_usd} for position ${position_address} (implied SOL=$${impliedSolPrice.toFixed(0)})`);
