@@ -22,6 +22,21 @@ import { recordPerformance } from "../lessons.js";
 import { isBaseMintOnCooldown, isPoolOnCooldown } from "../pool-memory.js";
 import { normalizeMint } from "./wallet.js";
 
+// ─── SOL price helper ─────────────────────────────────────────
+const SOL_MINT = "So11111111111111111111111111111111111111112";
+const JUPITER_PRICE_API = "https://api.jup.ag/price/v3";
+
+async function getSolPrice() {
+  try {
+    const res = await fetch(`${JUPITER_PRICE_API}?ids=${SOL_MINT}`);
+    const data = await res.json();
+    return data?.data?.[SOL_MINT]?.price ?? 0;
+  } catch (e) {
+    log("price_error", `Failed to fetch SOL price: ${e.message}`);
+    return 0;
+  }
+}
+
 // ─── Lazy SDK loader ───────────────────────────────────────────
 // @meteora-ag/dlmm → @coral-xyz/anchor uses CJS directory imports
 // that break in ESM on Node 24. Dynamic import defers loading until
@@ -106,7 +121,7 @@ export async function deployPosition({
   volatility,
   fee_tvl_ratio,
   organic_score,
-  initial_value_usd,
+  initial_value_usd, // deprecated: no longer trusted from LLM, calculated internally
 }) {
   pool_address = normalizeMint(pool_address);
   const activeStrategy = strategy || config.strategy.strategy;
@@ -242,6 +257,25 @@ export async function deployPosition({
     log("deploy", `SUCCESS — ${txHashes.length} tx(s): ${txHashes[0]}`);
 
     _positionsCacheAt = 0;
+
+    // Calculate initial_value_usd from actual deployed amounts instead of trusting LLM
+    let calculatedInitialUsd = 0;
+    try {
+      const solPrice = await getSolPrice();
+      calculatedInitialUsd = finalAmountY * solPrice;
+      // If tokenX was also deposited, estimate its value from the active bin price
+      if (finalAmountX > 0) {
+        const activePriceFloat = parseFloat(activeBin.price);
+        if (activePriceFloat > 0) {
+          // activeBin.price is tokenX per tokenY (SOL), so tokenX value in SOL = finalAmountX / activePriceFloat
+          calculatedInitialUsd += (finalAmountX / activePriceFloat) * solPrice;
+        }
+      }
+      log("deploy", `Calculated initial_value_usd: $${calculatedInitialUsd.toFixed(2)} (SOL price: $${solPrice.toFixed(2)}, amountY: ${finalAmountY}, amountX: ${finalAmountX})`);
+    } catch (e) {
+      log("deploy", `Warning: could not calculate initial_value_usd: ${e.message}`);
+    }
+
     trackPosition({
       position: newPosition.publicKey.toString(),
       pool: pool_address,
@@ -255,7 +289,7 @@ export async function deployPosition({
       amount_sol: finalAmountY,
       amount_x: finalAmountX,
       active_bin: activeBin.binId,
-      initial_value_usd,
+      initial_value_usd: calculatedInitialUsd,
     });
 
     const actualBinStep = pool.lbPair.binStep;
