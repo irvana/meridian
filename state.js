@@ -334,10 +334,23 @@ export function getTrackedPositions(openOnly = false) {
 
 /**
  * Get a single tracked position.
+ * Includes sanity check: if initial_value_usd is wildly inconsistent with
+ * amount_sol (e.g. LLM passed bogus value before the fix), auto-correct it.
  */
 export function getTrackedPosition(position_address) {
   const state = load();
-  return state.positions[position_address] || null;
+  const pos = state.positions[position_address] || null;
+  if (pos && pos.initial_value_usd != null && pos.amount_sol != null && pos.amount_sol > 0) {
+    // SOL price is unlikely to exceed $1000 or be below $1 in realistic scenarios.
+    // If initial_value_usd / amount_sol > 1000, the stored value is clearly bogus.
+    const impliedSolPrice = pos.initial_value_usd / pos.amount_sol;
+    if (impliedSolPrice > 1000 || impliedSolPrice < 1) {
+      log("state", `Sanitizing bogus initial_value_usd ${pos.initial_value_usd} for position ${position_address} (implied SOL=$${impliedSolPrice.toFixed(0)})`);
+      pos.initial_value_usd = null; // null it out so report shows "—" instead of wrong data
+      save(state);
+    }
+  }
+  return pos;
 }
 
 /**
