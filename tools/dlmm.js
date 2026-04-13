@@ -20,15 +20,17 @@ import {
 } from "../state.js";
 import { recordPerformance } from "../lessons.js";
 import { isBaseMintOnCooldown, isPoolOnCooldown } from "../pool-memory.js";
-import { normalizeMint, getWalletBalances } from "./wallet.js";
+import { normalizeMint } from "./wallet.js";
 
 // ─── SOL price helper ─────────────────────────────────────────
-// Uses Helius via getWalletBalances — same source as management cycle, already proven working.
+const SOL_MINT = "So11111111111111111111111111111111111111112";
+const JUPITER_PRICE_API = "https://api.jup.ag/price/v3";
+
 async function getSolPrice() {
   try {
-    const wallet = await getWalletBalances();
-    const price = wallet?.sol_price ?? 0;
-    return price;
+    const res = await fetch(`${JUPITER_PRICE_API}?ids=${SOL_MINT}`);
+    const data = await res.json();
+    return data?.data?.[SOL_MINT]?.price ?? 0;
   } catch (e) {
     log("price_error", `Failed to fetch SOL price: ${e.message}`);
     return 0;
