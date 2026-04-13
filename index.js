@@ -297,7 +297,8 @@ export async function runManagementCycle({ silent = false } = {}) {
         const netUsd = (p.pnl_pct != null && p.unclaimed_fees_usd != null && nowVal)
           ? (p.pnl_pct / 100 * nowVal) + p.unclaimed_fees_usd
           : null;
-        if (netUsd != null && netUsd > 0) {
+        const feeExitFloor = config.management.minProfitFloorUsd ?? 0;
+        if (netUsd != null && netUsd >= feeExitFloor) {
           actionMap.set(p.position, { action: "CLOSE", rule: 6, reason: `fee-first: fees $${(p.unclaimed_fees_usd ?? 0).toFixed(2)} >= $${feeFirstThreshold.toFixed(2)}, net +$${netUsd.toFixed(2)}` });
           continue;
         }
