@@ -163,6 +163,8 @@ const toolMap = {
       trailingTriggerPct: ["management", "trailingTriggerPct"],
       trailingDropPct: ["management", "trailingDropPct"],
       solMode: ["management", "solMode"],
+      feeFirstExitUsd: ["management", "feeFirstExitUsd"],
+      minProfitFloorUsd: ["management", "minProfitFloorUsd"],
       minSolToOpen: ["management", "minSolToOpen"],
       deployAmountSol: ["management", "deployAmountSol"],
       gasReserve: ["management", "gasReserve"],

@@ -70,6 +70,10 @@ export const config = {
     trailingTriggerPct:    u.trailingTriggerPct    ?? 3,    // activate trailing at X% PnL
     trailingDropPct:       u.trailingDropPct       ?? 1.5,  // close when drops X% from peak
     pnlSanityMaxDiffPct:   u.pnlSanityMaxDiffPct   ?? 5,    // max allowed diff between reported and derived pnl % before ignoring a tick
+    // Fee-first exit: close when unclaimed fees exceed this USD amount (covers gas + margin)
+    feeFirstExitUsd:       u.feeFirstExitUsd       ?? 0,    // 0 = disabled. e.g. 0.50 = close when fees > $0.50
+    // Min profit floor: block non-emergency closes if net profit below this USD amount
+    minProfitFloorUsd:     u.minProfitFloorUsd     ?? 0,    // 0 = disabled. e.g. 0.35 = don't close unless net > $0.35 (or stop loss)
     // SOL mode — positions, PnL, and balances reported in SOL instead of USD
     solMode:               u.solMode               ?? false,
   },

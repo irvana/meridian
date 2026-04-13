@@ -286,8 +286,14 @@ export async function runManagementCycle({ silent = false } = {}) {
       // Rule 5: fee yield too low
       if (p.fee_per_tvl_24h != null &&
           p.fee_per_tvl_24h < config.management.minFeePerTvl24h &&
-          (p.age_minutes ?? 0) >= 60) {
+          (p.age_minutes ?? 0) >= (config.management.minAgeBeforeYieldCheck ?? 60)) {
         actionMap.set(p.position, { action: "CLOSE", rule: 5, reason: "low yield" });
+        continue;
+      }
+      // Rule 6: fee-first exit — close when unclaimed fees cover gas + margin
+      const feeFirstThreshold = config.management.feeFirstExitUsd ?? 0;
+      if (feeFirstThreshold > 0 && (p.unclaimed_fees_usd ?? 0) >= feeFirstThreshold) {
+        actionMap.set(p.position, { action: "CLOSE", rule: 6, reason: `fees $${(p.unclaimed_fees_usd ?? 0).toFixed(2)} >= $${feeFirstThreshold.toFixed(2)} target` });
         continue;
       }
       // Claim rule
@@ -296,6 +302,29 @@ export async function runManagementCycle({ silent = false } = {}) {
         continue;
       }
       actionMap.set(p.position, { action: "STAY" });
+    }
+
+    // ── Min profit floor guard ────────────────────────────────────────
+    // Block non-emergency closes if net profit is below the floor.
+    // Emergency exits (stop loss, OOR too long) are exempt — those must always execute.
+    const profitFloor = config.management.minProfitFloorUsd ?? 0;
+    if (profitFloor > 0) {
+      for (const p of positionData) {
+        const act = actionMap.get(p.position);
+        if (act?.action !== "CLOSE") continue;
+        // Exempt emergency rules: stop loss (rule 1 / "exit"), OOR (rule 4), pumped above (rule 3)
+        const exemptRules = new Set([1, 3, 4, "exit"]);
+        if (exemptRules.has(act.rule)) continue;
+        // Calculate net profit (IL + unclaimed fees)
+        const nowVal = p.total_value_usd ?? 0;
+        const netUsd = (p.pnl_pct != null && p.unclaimed_fees_usd != null && nowVal)
+          ? (p.pnl_pct / 100 * nowVal) + p.unclaimed_fees_usd
+          : null;
+        if (netUsd != null && netUsd < profitFloor) {
+          log("cron", `Profit floor: ${p.pair} net $${netUsd.toFixed(2)} < $${profitFloor.toFixed(2)} — holding (was rule ${act.rule}: ${act.reason})`);
+          actionMap.set(p.position, { action: "STAY", rule: "floor", reason: `net $${netUsd.toFixed(2)} < floor $${profitFloor.toFixed(2)}` });
+        }
+      }
     }
 
     // ── Build JS report ──────────────────────────────────────────────
