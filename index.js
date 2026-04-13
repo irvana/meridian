@@ -355,11 +355,25 @@ export async function runManagementCycle({ silent = false } = {}) {
     const needsAction = [...actionMap.values()].filter(a => a.action !== "STAY");
     const actionSummary = needsAction.length > 0
       ? needsAction.map(a => a.action === "INSTRUCTION" ? "EVAL instruction" : `${a.action}${a.reason ? ` (${a.reason})` : ""}`).join(", ")
-      : "no action";
+      : "✋ no action";
 
     const cur = config.management.solMode ? "◎" : "$";
+    const totalNetUsd = positionData.reduce((sum, p) => {
+      if (p.pnl_pct == null || p.unclaimed_fees_usd == null || !p.total_value_usd) return sum;
+      return sum + (p.pnl_pct / 100 * p.total_value_usd) + p.unclaimed_fees_usd;
+    }, 0);
+    const netSummaryStr = totalNetUsd >= 0
+      ? `+${cur}${totalNetUsd.toFixed(2)}`
+      : `-${cur}${Math.abs(totalNetUsd).toFixed(2)}`;
+
     mgmtReport = reportLines.join("\n\n") +
-      `\n\nSummary: 💼 ${positions.length} positions | ${cur}${totalValue.toFixed(4)} | fees: ${cur}${totalUnclaimed.toFixed(4)} | ${actionSummary}`;
+      `\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `💼 ${positions.length} position${positions.length !== 1 ? "s" : ""}  ·  ` +
+      `💵 Val ${cur}${totalValue.toFixed(2)}  ·  ` +
+      `📈 Net ${netSummaryStr}  ·  ` +
+      `💎 Fees ${cur}${totalUnclaimed.toFixed(2)}\n` +
+      `→ ${actionSummary}`;
 
     // ── Call LLM only if action needed ──────────────────────────────
     const actionPositions = positionData.filter(p => {
